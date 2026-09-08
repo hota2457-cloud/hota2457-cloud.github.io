@@ -1,0 +1,1500 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音声反応型動画エフェクト</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f4f6;color:#222;font-family:Arial,"Noto Sans JP",sans-serif}
+.container{max-width:1100px;margin:auto;padding:20px}
+h1{font-size:24px;margin:0 0 8px}
+h2{font-size:18px;margin:0 0 15px}
+.description,.help{color:#666;font-size:13px;line-height:1.7}
+.section{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px #0000000d}
+.upload{display:block;border:2px dashed #aaa;border-radius:10px;padding:30px;text-align:center;cursor:pointer;background:#fafafa}
+.upload:hover{background:#f0f0f0}
+input[type=file]{display:none}
+.video-wrapper{background:#111;border-radius:10px;overflow:hidden}
+canvas{display:block;width:100%;height:auto;background:#111}
+.video-info{color:#ddd;padding:8px;font-size:13px}
+.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+button{border:0;border-radius:6px;padding:9px 15px;background:#2563eb;color:#fff;cursor:pointer;font-size:14px}
+button:hover{background:#1d4ed8}
+button:disabled{background:#aaa;cursor:not-allowed}
+button.secondary{background:#64748b}
+button.danger{background:#dc2626}
+input[type=range]{accent-color:#2563eb}
+.seek{width:100%;margin-top:10px}
+.time{font-size:13px;color:#666}
+.meters{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.meter{border:1px solid #ddd;border-radius:8px;padding:12px}
+.meter-title{display:flex;justify-content:space-between;font-weight:bold;font-size:14px}
+.bar{height:10px;background:#e5e7eb;border-radius:5px;overflow:hidden;margin-top:10px}
+.bar-fill{height:100%;width:0%;transition:width .05s linear}
+.low{color:#dc2626}.mid{color:#d97706}.high{color:#2563eb}.all{color:#7c3aed}
+.low .bar-fill{background:#ef4444}.mid .bar-fill{background:#f59e0b}
+.high .bar-fill{background:#3b82f6}.all .bar-fill{background:#8b5cf6}
+.settings-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}
+.setting{border:1px solid #ddd;border-radius:8px;padding:15px}
+.setting h3{font-size:15px;margin:0 0 12px}
+label{display:block;font-size:12px;color:#666;margin-bottom:10px}
+input[type=number],select{width:100%;padding:7px;border:1px solid #ccc;border-radius:6px;background:#fff}
+input[type=range]{width:100%;margin-top:5px}
+.value{float:right;color:#222;font-weight:bold}
+.effect-row{border:1px solid #ddd;border-radius:8px;padding:15px;margin-bottom:12px}
+.effect-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.effect-header strong{font-size:15px}
+.effect-header select{width:auto;min-width:180px}
+.effect-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.effect-card{border:1px solid #eee;border-radius:8px;padding:10px;background:#fafafa}
+.effect-card h4{font-size:13px;margin:0 0 10px}
+.effect-card .delete{float:right;background:#e5e7eb;color:#333;padding:3px 7px;font-size:11px}
+.effect-card .delete:hover{background:#d1d5db}
+.export-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:15px}
+#recordStatus{font-size:13px;color:#666}
+@media(max-width:700px){
+  .meters{grid-template-columns:repeat(2,1fr)}
+  .settings-grid{grid-template-columns:1fr}
+  .effect-grid{grid-template-columns:1fr}
+  .effect-header select{width:100%}
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>音声反応型動画エフェクト</h1>
+<div class="description">
+動画の音声を解析し、音域に応じて複数の映像エフェクトを反応させます。
+</div>
+
+<!-- 動画アップロード -->
+<div class="section">
+<h2>Ⅰ．動画をアップロード</h2>
+<label class="upload" for="videoFile">
+<div style="font-size:30px">＋</div>
+<div>動画ファイルを選択</div>
+<div style="font-size:12px;color:#888;margin-top:5px">
+MP4 / WebM など
+</div>
+</label>
+<input type="file" id="videoFile" accept="video/*">
+<p id="fileStatus" class="help">動画が選択されていません。</p>
+</div>
+
+<!-- プレビュー -->
+<div class="section">
+<h2>Ⅱ．インラインプレビュー</h2>
+<div class="video-wrapper">
+<canvas id="canvas" width="960" height="540"></canvas>
+<div class="video-info" id="videoInfo">
+動画をアップロードすると、ここに表示されます。
+</div>
+</div>
+
+<div class="controls">
+<button id="playBtn" disabled>▶ 再生</button>
+<button id="pauseBtn" disabled>⏸ 一時停止</button>
+<button id="resetBtn" disabled>↺ 最初に戻す</button>
+<span>音量</span>
+<input type="range" id="volume" min="0" max="1" step="0.01" value="1" style="width:100px">
+</div>
+
+<div class="controls">
+<span class="time" id="currentTime">0:00</span>
+<input type="range" id="seek" class="seek" min="0" max="0" step="0.01" value="0" disabled>
+<span class="time" id="duration">0:00</span>
+</div>
+</div>
+
+<!-- 音声解析 -->
+<div class="section">
+<h2>Ⅲ．音声のリアルタイム解析</h2>
+<div class="meters">
+<div class="meter low">
+<div class="meter-title"><span>低音域</span><span id="lowValue">0%</span></div>
+<div class="bar"><div class="bar-fill" id="lowBar"></div></div>
+<div class="help">低音域</div>
+</div>
+<div class="meter mid">
+<div class="meter-title"><span>中音域</span><span id="midValue">0%</span></div>
+<div class="bar"><div class="bar-fill" id="midBar"></div></div>
+<div class="help">中音域</div>
+</div>
+<div class="meter high">
+<div class="meter-title"><span>高音域</span><span id="highValue">0%</span></div>
+<div class="bar"><div class="bar-fill" id="highBar"></div></div>
+<div class="help">高音域</div>
+</div>
+<div class="meter all">
+<div class="meter-title"><span>全体音量</span><span id="allValue">0%</span></div>
+<div class="bar"><div class="bar-fill" id="allBar"></div></div>
+<div class="help">全体音量</div>
+</div>
+</div>
+<p class="help">
+表示方法は「音域の強さ」「音域の割合」から選べます。
+</p>
+</div>
+
+<!-- 音域設定 -->
+<div class="section">
+<h2>Ⅳ．音域の境界・解析設定</h2>
+<div class="settings-grid">
+<div class="setting">
+<h3>低音域</h3>
+<label>下限（Hz）
+<input type="number" id="lowMin" value="20" min="1" max="10000">
+</label>
+<label>上限（Hz）
+<input type="number" id="lowMax" value="250" min="1" max="20000">
+</label>
+</div>
+<div class="setting">
+<h3>中音域</h3>
+<label>下限（Hz）
+<input type="number" id="midMin" value="250" min="1" max="20000">
+</label>
+<label>上限（Hz）
+<input type="number" id="midMax" value="2000" min="1" max="20000">
+</label>
+</div>
+<div class="setting">
+<h3>高音域</h3>
+<label>下限（Hz）
+<input type="number" id="highMin" value="2000" min="1" max="20000">
+</label>
+<label>上限（Hz）
+<input type="number" id="highMax" value="20000" min="1" max="20000">
+</label>
+</div>
+</div>
+
+<div class="controls">
+<label style="margin:0;min-width:220px">
+表示方法
+<select id="displayMode">
+<option value="energy">音域の強さ</option>
+<option value="ratio">音域の割合</option>
+</select>
+</label>
+<label style="margin:0;min-width:220px">
+解析の反応
+<select id="analysisMode">
+<option value="peak">ピーク寄り</option>
+<option value="rms">平均音量寄り</option>
+</select>
+</label>
+</div>
+
+<p class="help">
+音域の割合は、各帯域のエネルギーを全体のエネルギーで割った値です。
+音域の境界を変更すると、メーターとエフェクトの反応も変わります。
+</p>
+</div>
+
+<!-- エフェクト -->
+<div class="section">
+<h2>Ⅴ．エフェクトの割り当て</h2>
+<p class="help">
+各音域に最大3つまでエフェクトを割り当てられます。
+同じエフェクトを複数の音域に使うこともできます。
+</p>
+
+<div id="effectList"></div>
+</div>
+
+<!-- 書き出し -->
+<div class="section">
+<h2>Ⅵ．動画を書き出す</h2>
+<div class="export-box">
+<p class="help">
+編集中のキャンバス映像と音声を録画し、WebM形式で保存します。
+録画中は動画を再生してください。
+</p>
+<div class="controls">
+<button id="recordBtn" class="danger" disabled>● 録画開始</button>
+<button id="stopRecordBtn" class="secondary" disabled>■ 録画停止</button>
+</div>
+<p id="recordStatus">録画していません。</p>
+</div>
+</div>
+
+</div>
+
+<video id="sourceVideo" playsinline style="display:none"></video>
+
+<script>
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const video=document.getElementById("sourceVideo");
+
+const fileInput=document.getElementById("videoFile");
+const playBtn=document.getElementById("playBtn");
+const pauseBtn=document.getElementById("pauseBtn");
+const resetBtn=document.getElementById("resetBtn");
+const volume=document.getElementById("volume");
+const seek=document.getElementById("seek");
+const currentTime=document.getElementById("currentTime");
+const duration=document.getElementById("duration");
+const fileStatus=document.getElementById("fileStatus");
+const videoInfo=document.getElementById("videoInfo");
+
+const recordBtn=document.getElementById("recordBtn");
+const stopRecordBtn=document.getElementById("stopRecordBtn");
+const recordStatus=document.getElementById("recordStatus");
+
+const channels=[
+  {id:"low",label:"低音域",color:"#ef4444"},
+  {id:"mid",label:"中音域",color:"#f59e0b"},
+  {id:"high",label:"高音域",color:"#3b82f6"},
+  {id:"all",label:"全体音量",color:"#8b5cf6"}
+];
+
+const effectNames=[
+  ["none","なし"],
+  ["noise","画面ノイズ"],
+  ["glitch","壊れた画面"],
+  ["brightness","明るさの変化"],
+  ["blur","視界のぼやけ"],
+  ["saturation","彩度の変化"],
+  ["scope","オシロスコープの波線"],
+  ["ripple","波紋"],
+  ["zoom","ズーム"]
+];
+
+const settings={};
+
+/*
+  エフェクト1個分の初期設定
+  細かい設定も最初から保存しておく
+*/
+function createDefaultEffect(){
+
+  return {
+    effect:"none",
+
+    // 共通設定
+    strength:50,
+    threshold:10,
+    smoothing:50,
+
+    // ノイズ
+    noiseType:"white",
+
+    // グリッチ
+    rgbShift:50,
+    scanline:50,
+    blockNoise:50,
+
+    // ぼかし
+    blurMax:15,
+
+    // 波線
+    scopeWidth:3,
+    scopeColor:"#00ff88",
+
+    // 波紋
+    rippleWidth:3,
+    rippleCount:4,
+    rippleColor:"#00aaff",
+
+    // ズーム
+    zoomMax:1.2,
+    zoomCenter:"center"
+  };
+
+}
+
+channels.forEach(c=>{
+  settings[c.id]={
+    effects:[]
+  };
+});
+
+
+/* =========================
+   エフェクト設定画面
+========================= */
+
+function createEffectCard(channelId,index){
+
+  const channel=settings[channelId];
+
+  // 古い形式の設定があっても、足りない項目を補う
+  if(!channel.effects[index]){
+    channel.effects[index]=createDefaultEffect();
+  }
+
+  const effect=channel.effects[index];
+
+  const card=document.createElement("div");
+  card.className="effect-card";
+
+  card.innerHTML=`
+    <h4>
+      エフェクト
+      <button class="delete">削除</button>
+    </h4>
+
+    <select class="effect-select"></select>
+
+    <label>
+      強さ
+      <span class="value strength-value">50</span>
+      <input class="strength" type="range" min="0" max="100" value="${effect.strength}">
+    </label>
+
+    <label>
+      反応する音量
+      <span class="value threshold-value">10</span>
+      <input class="threshold" type="range" min="0" max="100" value="${effect.threshold}">
+    </label>
+
+    <label>
+      反応の速さ
+      <span class="value smoothing-value">50</span>
+      <input class="smoothing" type="range" min="0" max="100" value="${effect.smoothing}">
+    </label>
+
+    <div class="extra-settings"></div>
+  `;
+
+  const select=card.querySelector(".effect-select");
+
+  effectNames.forEach(([value,label])=>{
+    const option=document.createElement("option");
+    option.value=value;
+    option.textContent=label;
+    select.appendChild(option);
+  });
+
+ select.value=effect.effect||"none";
+
+  select.addEventListener("change",()=>{
+    channel.effects[index].effect=select.value;
+    updateExtraSettings(card,channelId,index);
+  });
+
+  const strength=card.querySelector(".strength");
+  const threshold=card.querySelector(".threshold");
+  const smoothing=card.querySelector(".smoothing");
+
+  strength.addEventListener("input",()=>{
+    channel.effects[index].strength=Number(strength.value);
+    card.querySelector(".strength-value").textContent=strength.value;
+  });
+
+  threshold.addEventListener("input",()=>{
+    channel.effects[index].threshold=Number(threshold.value);
+    card.querySelector(".threshold-value").textContent=threshold.value;
+  });
+
+  smoothing.addEventListener("input",()=>{
+    channel.effects[index].smoothing=Number(smoothing.value);
+    card.querySelector(".smoothing-value").textContent=smoothing.value;
+  });
+
+  card.querySelector(".delete").addEventListener("click",()=>{
+    channel.effects.splice(index,1);
+    renderEffects();
+  });
+
+  updateExtraSettings(card,channelId,index);
+
+  return card;
+}
+
+
+function updateExtraSettings(card,channelId,index){
+
+  const effect=settings[channelId].effects[index];
+  const area=card.querySelector(".extra-settings");
+
+  area.innerHTML="";
+
+  if(!effect)return;
+
+  /*
+    ノイズ
+  */
+  if(effect.effect==="noise"){
+
+    area.innerHTML=`
+      <label>
+        ノイズの種類
+        <select class="noise-type">
+          <option value="white">白色ノイズ</option>
+          <option value="film">フィルムノイズ</option>
+          <option value="static">砂嵐</option>
+        </select>
+      </label>
+    `;
+
+    const input=area.querySelector(".noise-type");
+
+    input.value=effect.noiseType||"white";
+
+    input.addEventListener("change",()=>{
+      effect.noiseType=input.value;
+    });
+
+  }
+
+  /*
+    壊れた画面
+  */
+  if(effect.effect==="glitch"){
+
+    area.innerHTML=`
+      <label>
+        RGBずれ
+        <span class="value rgb-shift-value"></span>
+        <input class="rgb-shift" type="range"
+          min="0" max="100">
+      </label>
+
+      <label>
+        走査線
+        <span class="value scanline-value"></span>
+        <input class="scanline" type="range"
+          min="0" max="100">
+      </label>
+
+      <label>
+        ブロックノイズ
+        <span class="value block-noise-value"></span>
+        <input class="block-noise" type="range"
+          min="0" max="100">
+      </label>
+    `;
+
+    const rgb=area.querySelector(".rgb-shift");
+    const scan=area.querySelector(".scanline");
+    const block=area.querySelector(".block-noise");
+
+    const rgbValue=area.querySelector(".rgb-shift-value");
+    const scanValue=area.querySelector(".scanline-value");
+    const blockValue=area.querySelector(".block-noise-value");
+
+    rgb.value=effect.rgbShift ?? 50;
+    scan.value=effect.scanline ?? 50;
+    block.value=effect.blockNoise ?? 50;
+
+    rgbValue.textContent=rgb.value;
+    scanValue.textContent=scan.value;
+    blockValue.textContent=block.value;
+
+    rgb.addEventListener("input",()=>{
+      effect.rgbShift=Number(rgb.value);
+      rgbValue.textContent=rgb.value;
+    });
+
+    scan.addEventListener("input",()=>{
+      effect.scanline=Number(scan.value);
+      scanValue.textContent=scan.value;
+    });
+
+    block.addEventListener("input",()=>{
+      effect.blockNoise=Number(block.value);
+      blockValue.textContent=block.value;
+    });
+
+  }
+
+  /*
+    ぼかし
+  */
+  if(effect.effect==="blur"){
+
+    area.innerHTML=`
+      <label>
+        ぼかしの最大値
+        <span class="value blur-max-value"></span>
+        <input class="blur-max" type="range"
+          min="0" max="30">
+      </label>
+    `;
+
+    const input=area.querySelector(".blur-max");
+    const value=area.querySelector(".blur-max-value");
+
+    input.value=effect.blurMax ?? 15;
+    value.textContent=input.value;
+
+    input.addEventListener("input",()=>{
+      effect.blurMax=Number(input.value);
+      value.textContent=input.value;
+    });
+
+  }
+
+  /*
+    波線
+  */
+  if(effect.effect==="scope"){
+
+    area.innerHTML=`
+      <label>
+        波線の太さ
+        <span class="value scope-width-value"></span>
+        <input class="scope-width" type="range"
+          min="1" max="20">
+      </label>
+
+      <label>
+        波線の色
+        <input class="scope-color" type="color">
+      </label>
+    `;
+
+    const widthInput=area.querySelector(".scope-width");
+    const colorInput=area.querySelector(".scope-color");
+
+    widthInput.value=effect.scopeWidth ?? 3;
+    colorInput.value=effect.scopeColor || "#00ff88";
+
+    area.querySelector(".scope-width-value").textContent=
+      widthInput.value;
+
+    widthInput.addEventListener("input",()=>{
+      effect.scopeWidth=Number(widthInput.value);
+
+      area.querySelector(".scope-width-value").textContent=
+        widthInput.value;
+    });
+
+    colorInput.addEventListener("input",()=>{
+      effect.scopeColor=colorInput.value;
+    });
+
+  }
+
+  /*
+    波紋
+  */
+  if(effect.effect==="ripple"){
+
+    area.innerHTML=`
+      <label>
+        波紋の太さ
+        <span class="value ripple-width-value"></span>
+        <input class="ripple-width" type="range"
+          min="1" max="20">
+      </label>
+
+      <label>
+        波紋の数
+        <span class="value ripple-count-value"></span>
+        <input class="ripple-count" type="range"
+          min="1" max="12">
+      </label>
+
+      <label>
+        波紋の色
+        <input class="ripple-color" type="color">
+      </label>
+    `;
+
+    const widthInput=area.querySelector(".ripple-width");
+    const countInput=area.querySelector(".ripple-count");
+    const colorInput=area.querySelector(".ripple-color");
+
+    widthInput.value=effect.rippleWidth ?? 3;
+    countInput.value=effect.rippleCount ?? 4;
+    colorInput.value=effect.rippleColor || "#00aaff";
+
+    area.querySelector(".ripple-width-value").textContent=
+      widthInput.value;
+
+    area.querySelector(".ripple-count-value").textContent=
+      countInput.value;
+
+    widthInput.addEventListener("input",()=>{
+      effect.rippleWidth=Number(widthInput.value);
+
+      area.querySelector(".ripple-width-value").textContent=
+        widthInput.value;
+    });
+
+    countInput.addEventListener("input",()=>{
+      effect.rippleCount=Number(countInput.value);
+
+      area.querySelector(".ripple-count-value").textContent=
+        countInput.value;
+    });
+
+    colorInput.addEventListener("input",()=>{
+      effect.rippleColor=colorInput.value;
+    });
+
+  }
+
+  /*
+    ズーム
+  */
+  if(effect.effect==="zoom"){
+
+    area.innerHTML=`
+      <label>
+        ズーム最大倍率
+        <span class="value zoom-max-value"></span>
+        <input class="zoom-max" type="range"
+          min="1" max="2" step="0.01">
+      </label>
+
+      <label>
+        ズームの中心
+        <select class="zoom-center">
+          <option value="center">中央</option>
+          <option value="random">ランダム</option>
+        </select>
+      </label>
+    `;
+
+    const zoomInput=area.querySelector(".zoom-max");
+    const centerInput=area.querySelector(".zoom-center");
+
+    zoomInput.value=effect.zoomMax ?? 1.2;
+    centerInput.value=effect.zoomCenter || "center";
+
+    area.querySelector(".zoom-max-value").textContent=
+      zoomInput.value;
+
+    zoomInput.addEventListener("input",()=>{
+      effect.zoomMax=Number(zoomInput.value);
+
+      area.querySelector(".zoom-max-value").textContent=
+        zoomInput.value;
+    });
+
+    centerInput.addEventListener("change",()=>{
+      effect.zoomCenter=centerInput.value;
+    });
+
+  }
+
+}
+
+function renderEffects(){
+
+  const list=document.getElementById("effectList");
+  list.innerHTML="";
+
+  channels.forEach(channel=>{
+
+    const row=document.createElement("div");
+    row.className="effect-row";
+
+    const header=document.createElement("div");
+    header.className="effect-header";
+
+    header.innerHTML=`
+      <strong style="color:${channel.color}">
+        ${channel.label}
+      </strong>
+      <button class="add-effect">＋ エフェクトを追加</button>
+    `;
+
+    const grid=document.createElement("div");
+    grid.className="effect-grid";
+
+    settings[channel.id].effects.forEach((effect,index)=>{
+      grid.appendChild(createEffectCard(channel.id,index));
+    });
+
+    header.querySelector(".add-effect").addEventListener("click",()=>{
+      if(settings[channel.id].effects.length>=3){
+        alert("1つの音域に設定できるエフェクトは最大3つです。");
+        return;
+      }
+    settings[channel.id].effects.push(
+  createDefaultEffect()
+);
+
+renderEffects();
+    });
+
+    row.appendChild(header);
+    row.appendChild(grid);
+    list.appendChild(row);
+
+  });
+
+}
+
+renderEffects();
+
+
+/* =========================
+   音声解析
+========================= */
+
+let audioContext=null;
+let analyser=null;
+let sourceNode=null;
+let frequencyData=null;
+let timeData=null;
+
+let animationId=0;
+let objectUrl=null;
+let loaded=false;
+
+let smoothed={low:0,mid:0,high:0,all:0};
+
+function ensureAudio(){
+
+  if(audioContext)return;
+
+  audioContext=new(
+    window.AudioContext||
+    window.webkitAudioContext
+  )();
+
+  analyser=audioContext.createAnalyser();
+
+  analyser.fftSize=2048;
+
+  analyser.smoothingTimeConstant=0.3;
+
+  sourceNode=audioContext.createMediaElementSource(video);
+
+  sourceNode.connect(analyser);
+  analyser.connect(audioContext.destination);
+
+  frequencyData=new Uint8Array(analyser.frequencyBinCount);
+  timeData=new Uint8Array(analyser.fftSize);
+
+}
+
+
+function bandEnergy(minHz,maxHz){
+
+  const nyquist=audioContext.sampleRate/2;
+
+  let start=Math.floor(minHz/nyquist*frequencyData.length);
+  let end=Math.ceil(maxHz/nyquist*frequencyData.length);
+
+  start=Math.max(0,start);
+  end=Math.min(frequencyData.length-1,end);
+
+  let sum=0;
+  let count=0;
+
+  for(let i=start;i<=end;i++){
+    sum+=frequencyData[i]*frequencyData[i];
+    count++;
+  }
+
+  return count?Math.sqrt(sum/count)/255:0;
+
+}
+
+
+function analyseAudio(){
+
+  if(!analyser){
+    return{low:0,mid:0,high:0,all:0};
+  }
+
+  analyser.getByteFrequencyData(frequencyData);
+  analyser.getByteTimeDomainData(timeData);
+
+  const low=bandEnergy(
+    Number(document.getElementById("lowMin").value),
+    Number(document.getElementById("lowMax").value)
+  );
+
+  const mid=bandEnergy(
+    Number(document.getElementById("midMin").value),
+    Number(document.getElementById("midMax").value)
+  );
+
+  const high=bandEnergy(
+    Number(document.getElementById("highMin").value),
+    Number(document.getElementById("highMax").value)
+  );
+
+  let rms=0;
+
+  for(let i=0;i<timeData.length;i++){
+    const x=(timeData[i]-128)/128;
+    rms+=x*x;
+  }
+
+  const all=Math.min(1,Math.sqrt(rms/timeData.length)*2.5);
+
+  let raw={low,mid,high,all};
+
+  if(document.getElementById("displayMode").value==="ratio"){
+    const total=low+mid+high;
+    if(total>0){
+      raw.low=low/total;
+      raw.mid=mid/total;
+      raw.high=high/total;
+    }
+  }
+
+  channels.forEach(c=>{
+
+    const id=c.id;
+
+    const smoothing=settings[id].effects[0]?.smoothing||50;
+
+    const speed=0.35-(smoothing/100)*0.33;
+
+    smoothed[id]+=(raw[id]-smoothed[id])*speed;
+
+  });
+
+  return smoothed;
+
+}
+
+
+/* =========================
+   動画描画
+========================= */
+
+function drawVideo(){
+
+  if(!loaded)return;
+
+  const w=canvas.width;
+  const h=canvas.height;
+
+  ctx.clearRect(0,0,w,h);
+
+  ctx.fillStyle="#111";
+  ctx.fillRect(0,0,w,h);
+
+  const vw=video.videoWidth||w;
+  const vh=video.videoHeight||h;
+
+  const scale=Math.min(w/vw,h/vh);
+
+  const dw=vw*scale;
+  const dh=vh*scale;
+
+  ctx.drawImage(
+    video,
+    (w-dw)/2,
+    (h-dh)/2,
+    dw,
+    dh
+  );
+
+  const levels=analyseAudio();
+
+  updateMeters(levels);
+
+  applyEffects(levels,w,h);
+
+  animationId=requestAnimationFrame(drawVideo);
+
+}
+
+
+/* =========================
+   エフェクト反応
+========================= */
+
+function response(effect,level){
+
+  const threshold=effect.threshold/100;
+
+  const value=Math.max(
+    0,
+    Math.min(
+      1,
+      (level-threshold)/(1-threshold)
+    )
+  );
+
+  return value*(effect.strength/100);
+
+}
+
+
+function applyEffects(levels,w,h){
+
+  channels.forEach(channel=>{
+
+    settings[channel.id].effects.forEach(effect=>{
+
+      const amount=response(
+        effect,
+        levels[channel.id]
+      );
+
+      if(effect.effect==="noise"){
+        drawNoise(amount,w,h,effect.noiseType);
+      }
+
+      if(effect.effect==="glitch"){
+        drawGlitch(amount,w,h,effect);
+      }
+
+      if(effect.effect==="brightness"){
+        drawBrightness(amount,w,h);
+      }
+
+      if(effect.effect==="blur"){
+        drawBlur(amount,w,h,effect.blurMax||15);
+      }
+
+      if(effect.effect==="saturation"){
+        drawSaturation(amount,w,h);
+      }
+
+      if(effect.effect==="scope"){
+        drawScope(amount,w,h,effect);
+      }
+
+      if(effect.effect==="ripple"){
+        drawRipple(amount,w,h,effect);
+      }
+
+      if(effect.effect==="zoom"){
+        drawZoom(amount,w,h,effect);
+      }
+
+    });
+
+  });
+
+}
+
+
+/* =========================
+   画面ノイズ
+========================= */
+
+function drawNoise(amount,w,h,type){
+
+  if(amount<=0.001)return;
+
+  const count=Math.floor(amount*400);
+
+  ctx.save();
+
+  ctx.globalAlpha=amount*0.35;
+
+  for(let i=0;i<count;i++){
+
+    const x=Math.random()*w;
+    const y=Math.random()*h;
+
+    const size=1+Math.random()*4;
+
+    let value=Math.random()*255;
+
+    if(type==="film"){
+      value=120+Math.random()*135;
+    }
+
+    if(type==="static"){
+      value=Math.random()>0.5?255:0;
+    }
+
+    ctx.fillStyle=`rgb(${value},${value},${value})`;
+
+    ctx.fillRect(x,y,size,size);
+
+  }
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   壊れた画面
+========================= */
+
+function drawGlitch(amount,w,h,effect){
+
+  if(amount<=0.001)return;
+
+  ctx.save();
+
+  const shift=amount*(effect.rgbShift||50)/100*30;
+
+  const blocks=Math.floor(amount*(effect.blockNoise||50)/100*20);
+
+  const scan=amount*(effect.scanline||50)/100;
+
+  ctx.globalAlpha=amount*0.7;
+
+  ctx.globalCompositeOperation="screen";
+
+  ctx.drawImage(canvas,shift,0,w,h);
+
+  ctx.globalCompositeOperation="difference";
+
+  ctx.drawImage(canvas,-shift,0,w,h);
+
+  ctx.globalCompositeOperation="source-over";
+
+  ctx.globalAlpha=amount*0.5;
+
+  for(let i=0;i<blocks;i++){
+
+    const y=Math.random()*h;
+    const height=2+Math.random()*20;
+    const offset=(Math.random()-0.5)*amount*100;
+
+    ctx.drawImage(
+      canvas,
+      0,y,w,height,
+      offset,y,w,height
+    );
+
+  }
+
+  ctx.globalAlpha=scan*0.25;
+
+  for(let y=0;y<h;y+=4){
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,y,w,1);
+  }
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   明るさ
+========================= */
+
+function drawBrightness(amount,w,h){
+
+  if(amount<=0.001)return;
+
+  ctx.save();
+
+  ctx.globalAlpha=amount*0.45;
+
+  ctx.fillStyle=amount>0.5?"#fff":"#000";
+
+  ctx.fillRect(0,0,w,h);
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   ぼかし
+========================= */
+
+function drawBlur(amount,w,h,maxBlur){
+
+  if(amount<=0.001)return;
+
+  const pixels=Math.round(amount*maxBlur);
+
+  ctx.save();
+
+  ctx.globalAlpha=amount*0.65;
+
+  ctx.filter=`blur(${pixels}px)`;
+
+  ctx.drawImage(canvas,0,0,w,h);
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   彩度
+========================= */
+
+function drawSaturation(amount,w,h){
+
+  if(amount<=0.001)return;
+
+  ctx.save();
+
+  ctx.globalAlpha=amount*0.5;
+
+  ctx.filter=`saturate(${1+amount*3})`;
+
+  ctx.drawImage(canvas,0,0,w,h);
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   波線
+========================= */
+
+function drawScope(amount,w,h,effect){
+
+  if(amount<=0.001)return;
+
+  analyser.getByteTimeDomainData(timeData);
+
+  ctx.save();
+
+  ctx.globalAlpha=0.2+amount*0.8;
+
+  ctx.strokeStyle=effect.scopeColor||"#00ff88";
+
+  ctx.lineWidth=effect.scopeWidth||3;
+
+  ctx.beginPath();
+
+  const step=Math.max(1,Math.floor(timeData.length/240));
+
+  for(let i=0;i<timeData.length;i+=step){
+
+    const x=i/(timeData.length-1)*w;
+
+    const y=h/2+
+      ((timeData[i]-128)/128)*
+      h*0.22*amount;
+
+    if(i===0)ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+
+  }
+
+  ctx.stroke();
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   波紋
+========================= */
+
+function drawRipple(amount,w,h,effect){
+
+  if(amount<=0.001)return;
+
+  ctx.save();
+
+  ctx.globalAlpha=0.25+amount*0.6;
+
+  ctx.strokeStyle=effect.rippleColor||"#00aaff";
+
+  ctx.lineWidth=effect.rippleWidth||3;
+
+  const cx=w/2;
+  const cy=h/2;
+
+  const base=20+amount*120;
+
+  const count=effect.rippleCount||4;
+
+  for(let i=0;i<count;i++){
+
+    const radius=
+      base+
+      i*35+
+      Math.sin(performance.now()/300+i)*8;
+
+    ctx.beginPath();
+
+    ctx.arc(cx,cy,radius,0,Math.PI*2);
+
+    ctx.stroke();
+
+  }
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   ズーム
+========================= */
+
+function drawZoom(amount,w,h,effect){
+
+  if(amount<=0.001)return;
+
+  const maxZoom=effect.zoomMax||1.2;
+
+  const zoom=1+amount*(maxZoom-1);
+
+  let cx=w/2;
+  let cy=h/2;
+
+  if(effect.zoomCenter==="random"){
+    cx=w*(0.3+Math.random()*0.4);
+    cy=h*(0.3+Math.random()*0.4);
+  }
+
+  const dw=w*zoom;
+  const dh=h*zoom;
+
+  ctx.save();
+
+  ctx.globalAlpha=amount*0.8;
+
+  ctx.drawImage(
+    canvas,
+    cx-dw/2,
+    cy-dh/2,
+    dw,
+    dh
+  );
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   メーター
+========================= */
+
+function updateMeters(levels){
+
+  channels.forEach(channel=>{
+
+    const value=Math.round(levels[channel.id]*100);
+
+    document.getElementById(channel.id+"Value").textContent=value+"%";
+
+    document.getElementById(channel.id+"Bar").style.width=value+"%";
+
+  });
+
+}
+
+
+/* =========================
+   動画アップロード
+========================= */
+
+fileInput.addEventListener("change",()=>{
+
+  const file=fileInput.files[0];
+
+  if(!file)return;
+
+  if(objectUrl)URL.revokeObjectURL(objectUrl);
+
+  objectUrl=URL.createObjectURL(file);
+
+  video.src=objectUrl;
+
+  video.load();
+
+  loaded=false;
+
+  fileStatus.textContent="読み込み中…";
+
+  videoInfo.textContent=file.name;
+
+});
+
+
+video.addEventListener("loadedmetadata",()=>{
+
+  loaded=true;
+
+  seek.max=video.duration;
+
+  seek.value=0;
+
+  duration.textContent=formatTime(video.duration);
+
+  currentTime.textContent="0:00";
+
+  fileStatus.textContent=
+    "動画を読み込みました。再生ボタンで開始できます。";
+
+  playBtn.disabled=false;
+  pauseBtn.disabled=false;
+  resetBtn.disabled=false;
+  seek.disabled=false;
+  recordBtn.disabled=false;
+
+  const aspectRatio=
+    video.videoHeight/video.videoWidth||0.5625;
+
+  canvas.width=960;
+
+  canvas.height=Math.round(960*aspectRatio);
+
+});
+
+
+function formatTime(seconds){
+
+  if(!isFinite(seconds))return"0:00";
+
+  const minutes=Math.floor(seconds/60);
+
+  const secs=Math.floor(seconds%60);
+
+  return minutes+":"+String(secs).padStart(2,"0");
+
+}
+
+
+video.addEventListener("timeupdate",()=>{
+
+  seek.value=video.currentTime;
+
+  currentTime.textContent=formatTime(video.currentTime);
+
+});
+
+
+/* =========================
+   再生・一時停止
+========================= */
+
+playBtn.addEventListener("click",async()=>{
+
+  if(!loaded)return;
+
+  ensureAudio();
+
+  if(audioContext.state==="suspended"){
+    await audioContext.resume();
+  }
+
+  await video.play();
+
+  cancelAnimationFrame(animationId);
+
+  drawVideo();
+
+});
+
+
+pauseBtn.addEventListener("click",()=>{
+
+  video.pause();
+
+  cancelAnimationFrame(animationId);
+
+});
+
+
+resetBtn.addEventListener("click",()=>{
+
+  video.currentTime=0;
+
+});
+
+
+volume.addEventListener("input",()=>{
+
+  video.volume=Number(volume.value);
+
+});
+
+
+seek.addEventListener("input",()=>{
+
+  video.currentTime=Number(seek.value);
+
+});
+
+
+/* =========================
+   動画録画
+========================= */
+
+let mediaRecorder=null;
+let recordedChunks=[];
+
+recordBtn.addEventListener("click",async()=>{
+
+  if(!loaded)return;
+
+  ensureAudio();
+
+  if(audioContext.state==="suspended"){
+    await audioContext.resume();
+  }
+
+  recordedChunks=[];
+
+  const canvasStream=canvas.captureStream(30);
+
+  const audioStream=audioContext.createMediaStreamDestination();
+
+  sourceNode.connect(audioStream);
+
+  const combinedStream=new MediaStream([
+    ...canvasStream.getVideoTracks(),
+    ...audioStream.stream.getAudioTracks()
+  ]);
+
+  let options={mimeType:"video/webm;codecs=vp9,opus"};
+
+  if(!MediaRecorder.isTypeSupported(options.mimeType)){
+    options={mimeType:"video/webm"};
+  }
+
+  mediaRecorder=new MediaRecorder(combinedStream,options);
+
+  mediaRecorder.ondataavailable=e=>{
+    if(e.data.size>0)recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop=()=>{
+
+    const blob=new Blob(recordedChunks,{type:"video/webm"});
+
+    const url=URL.createObjectURL(blob);
+
+    const a=document.createElement("a");
+
+    a.href=url;
+
+    a.download="audio_reactive_video.webm";
+
+    a.click();
+
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+
+    recordStatus.textContent="録画が完了しました。";
+
+  };
+
+  mediaRecorder.start();
+
+  recordBtn.disabled=true;
+
+  stopRecordBtn.disabled=false;
+
+  recordStatus.textContent="録画中…";
+
+});
+
+
+stopRecordBtn.addEventListener("click",()=>{
+
+  if(mediaRecorder&&mediaRecorder.state!=="inactive"){
+    mediaRecorder.stop();
+  }
+
+  recordBtn.disabled=false;
+
+  stopRecordBtn.disabled=true;
+
+});
+
+
+</script>
+</body>
+</html>
